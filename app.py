@@ -3,7 +3,7 @@ import json
 import pyodbc
 import pandas as pd
 import numpy as np
-from flask import Flask, render_template
+from flask import Flask, render_template, jsonify
 from datetime import datetime, date
 
 app = Flask(__name__)
@@ -27,11 +27,11 @@ def conectar_sql_server():
 
 
 # =====================================================
-# SERIALIZAÇÃO SEGURA (QUALQUER CAMPO)
+# SERIALIZAÇÃO SEGURA
 # =====================================================
 def json_safe(value):
     if value is None or pd.isna(value):
-        return ""
+        return 0
     if isinstance(value, (np.integer, int)):
         return int(value)
     if isinstance(value, (np.floating, float)):
@@ -49,9 +49,49 @@ def index():
     return render_template('index.html')
 
 
+# =====================================================
+# ROTA DATATABLES (OBRIGATÓRIA)
+# =====================================================
+@app.route('/clientes')
+def clientes():
+    conn = conectar_sql_server()
+    if not conn:
+        return jsonify({"data": []})
+
+    try:
+        df = pd.read_sql("SELECT * FROM clien", conn)
+
+        data = []
+        for _, row in df.iterrows():
+            item = {}
+            for col in df.columns:
+                item[col] = json_safe(row[col])
+            data.append(item)
+
+        return jsonify({"data": data})
+
+    except Exception as e:
+        print("Erro /clientes:", e)
+        return jsonify({"data": []})
+
+    finally:
+        conn.close()
+
+
+# =====================================================
+# DASHBOARD (CARDS)
+# =====================================================
 @app.route('/dashboard')
 def dashboard():
     conn = conectar_sql_server()
+    if not conn:
+        return jsonify({
+            "total_clientes": 0,
+            "clientes_bloqueados": 0,
+            "media_score": 0,
+            "utilizacao_media": 0
+        })
+
     try:
         query = """
             SELECT
@@ -69,93 +109,27 @@ def dashboard():
 
         df = pd.read_sql(query, conn)
 
-        total_clientes = int(df.iloc[0]["total_clientes"] or 0)
-        clientes_bloqueados = int(df.iloc[0]["clientes_bloqueados"] or 0)
+        utilizacao = df.iloc[0]["utilizacao_media"]
+        utilizacao = float(utilizacao) if utilizacao is not None else 0
+        utilizacao = round(utilizacao, 2)
 
-        # 🔒 BLINDAGEM TOTAL
-        utilizacao_media_raw = df.iloc[0]["utilizacao_media"]
-        if utilizacao_media_raw is None or pd.isna(utilizacao_media_raw):
-            utilizacao_media = 0.0
-        else:
-            utilizacao_media = float(utilizacao_media_raw)
+        media_score = round(max(0, 100 - utilizacao), 2)
 
-        utilizacao_media = round(utilizacao_media, 2)
-
-        media_score = round(max(0, 100 - utilizacao_media), 2)
-
-        return {
-            "total_clientes": total_clientes,
-            "clientes_bloqueados": clientes_bloqueados,
+        return jsonify({
+            "total_clientes": int(df.iloc[0]["total_clientes"]),
+            "clientes_bloqueados": int(df.iloc[0]["clientes_bloqueados"]),
             "media_score": media_score,
-            "utilizacao_media": utilizacao_media
-        }
+            "utilizacao_media": utilizacao
+        })
 
     except Exception as e:
         print("Erro /dashboard:", e)
-        return {
+        return jsonify({
             "total_clientes": 0,
             "clientes_bloqueados": 0,
             "media_score": 0,
             "utilizacao_media": 0
-        }
-
-    finally:
-        if conn:
-            conn.close()
-            
-def dashboard():
-    conn = conectar_sql_server()
-    if not conn:
-        return {
-            "total_clientes": 0,
-            "clientes_bloqueados": 0,
-            "media_score": 0,
-            "utilizacao_media": 0
-        }
-
-    try:
-        query = """
-            SELECT
-                COUNT(*) AS total_clientes,
-                SUM(CASE WHEN Bloqueado = 1 THEN 1 ELSE 0 END) AS clientes_bloqueados,
-                AVG(
-                    CASE 
-                        WHEN Limite_Credito IS NOT NULL 
-                             AND Limite_Credito > 0
-                        THEN (Total_Debito / Limite_Credito) * 100
-                        ELSE 0
-                    END
-                ) AS utilizacao_media
-            FROM clien
-        """
-
-        df = pd.read_sql(query, conn)
-
-        total_clientes = int(df.iloc[0]["total_clientes"] or 0)
-        clientes_bloqueados = int(df.iloc[0]["clientes_bloqueados"] or 0)
-
-        utilizacao_media = df.iloc[0]["utilizacao_media"]
-        utilizacao_media = float(utilizacao_media) if utilizacao_media is not None else 0
-        utilizacao_media = round(utilizacao_media, 2)
-
-        # Score simples (quanto menor a utilização, melhor o score)
-        media_score = round(max(0, 100 - utilizacao_media), 2)
-
-        return {
-            "total_clientes": total_clientes,
-            "clientes_bloqueados": clientes_bloqueados,
-            "media_score": media_score,
-            "utilizacao_media": utilizacao_media
-        }
-
-    except Exception as e:
-        print("Erro /dashboard:", e)
-        return {
-            "total_clientes": 0,
-            "clientes_bloqueados": 0,
-            "media_score": 0,
-            "utilizacao_media": 0
-        }
+        })
 
     finally:
         conn.close()
