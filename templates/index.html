@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Análise de Crédito - Sistema</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.datatables.net/1.11.5/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .card {
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .score-badge {
+            font-size: 1.2em;
+            padding: 5px 15px;
+        }
+        .risco-baixo { background-color: #28a745; }
+        .risco-moderado { background-color: #ffc107; color: #000; }
+        .risco-alto { background-color: #dc3545; }
+        .risco-muito-alto { background-color: #343a40; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">Análise de Crédito</a>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Dashboard de Crédito</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row" id="dashboard-stats">
+                            <!-- Estatísticas serão carregadas aqui -->
+                        </div>
+                        <div class="row mt-4">
+                            <div class="col-md-8">
+                                <canvas id="riscoChart"></canvas>
+                            </div>
+                            <div class="col-md-4">
+                                <h6>Top Clientes</h6>
+                                <ul class="list-group" id="top-clientes">
+                                    <!-- Top clientes serão carregados aqui -->
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Lista de Clientes</h5>
+                    </div>
+                    <div class="card-body">
+                        <table id="clientesTable" class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Razão Social</th>
+                                    <th>Limite Crédito</th>
+                                    <th>Débito Total</th>
+                                    <th>Atraso Atual</th>
+                                    <th>Score</th>
+                                    <th>Classificação</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Dados serão carregados via JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Análise Detalhada -->
+    <div class="modal fade" id="analiseModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Análise Detalhada</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="modal-body">
+                    <!-- Conteúdo será carregado via JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.11.5/js/dataTables.bootstrap5.min.js"></script>
+    
+    <script>
+        $(document).ready(function() {
+            // Carregar dashboard
+            carregarDashboard();
+            
+            // Carregar tabela de clientes
+            const table = $('#clientesTable').DataTable({
+                ajax: {
+                    url: '/clientes',
+                    dataSrc: ''
+                },
+                columns: [
+                    { data: 'Codigo' },
+                    { data: 'Razao_Social' },
+                    { 
+                        data: 'Limite_Credito',
+                        render: function(data) {
+                            return 'R$ ' + parseFloat(data || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                        }
+                    },
+                    { 
+                        data: 'Total_Debito',
+                        render: function(data) {
+                            return 'R$ ' + parseFloat(data || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                        }
+                    },
+                    { data: 'Atraso_Atual' },
+                    { data: 'score' },
+                    {
+                        data: 'classificacao',
+                        render: function(data, type, row) {
+                            return `<span class="badge risco-${row.cor}">${data}</span>`;
+                        }
+                    },
+                    {
+                        data: 'Codigo',
+                        render: function(data) {
+                            return `<button class="btn btn-sm btn-primary" onclick="verAnalise(${data})">Ver Análise</button>`;
+                        }
+                    }
+                ]
+            });
+        });
+
+        function carregarDashboard() {
+            $.get('/dashboard', function(data) {
+                if (!data.error) {
+                    // Atualizar estatísticas
+                    $('#dashboard-stats').html(`
+                        <div class="col-md-3">
+                            <div class="card text-white bg-primary">
+                                <div class="card-body">
+                                    <h6>Total Clientes</h6>
+                                    <h3>${data.total_clientes}</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card text-white bg-danger">
+                                <div class="card-body">
+                                    <h6>Bloqueados</h6>
+                                    <h3>${data.clientes_bloqueados}</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card text-white bg-success">
+                                <div class="card-body">
+                                    <h6>Média Score</h6>
+                                    <h3>${data.media_score}</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card text-white bg-warning">
+                                <div class="card-body">
+                                    <h6>Utilização Média</h6>
+                                    <h3>${data.media_utilizacao}%</h3>
+                                </div>
+                            </div>
+                        </div>
+                    `);
+
+                    // Atualizar gráfico
+                    const ctx = document.getElementById('riscoChart').getContext('2d');
+                    new Chart(ctx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: Object.keys(data.classificacoes),
+                            datasets: [{
+                                data: Object.values(data.classificacoes),
+                                backgroundColor: ['#28a745', '#ffc107', '#dc3545', '#343a40']
+                            }]
+                        }
+                    });
+
+                    // Top clientes
+                    const topClientesList = $('#top-clientes');
+                    topClientesList.empty();
+                    data.top_clientes.forEach(cliente => {
+                        topClientesList.append(`
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                ${cliente.razao_social}
+                                <span class="badge bg-primary rounded-pill">${cliente.score}</span>
+                            </li>
+                        `);
+                    });
+                }
+            });
+        }
+
+        function verAnalise(codigo) {
+            $.get(`/analise/${codigo}`, function(data) {
+                if (!data.error) {
+                    const cliente = data.cliente;
+                    const analise = data;
+                    
+                    $('#modal-body').html(`
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Informações do Cliente</h6>
+                                <table class="table table-sm">
+                                    <tr><td><strong>Código:</strong></td><td>${cliente.Codigo}</td></tr>
+                                    <tr><td><strong>Razão Social:</strong></td><td>${cliente.Razao_Social}</td></tr>
+                                    <tr><td><strong>Fantasia:</strong></td><td>${cliente.Fantasia || '-'}</td></tr>
+                                    <tr><td><strong>CNPJ/CPF:</strong></td><td>${cliente.Cgc_Cpf || '-'}</td></tr>
+                                </table>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Score de Crédito</h6>
+                                <div class="text-center">
+                                    <h1 class="display-4">${analise.score}</h1>
+                                    <span class="badge ${analise.cor_risco} score-badge">${analise.classificacao_risco}</span>
+                                    <p class="mt-2"><strong>Sugestão:</strong> ${analise.limite_sugerido}</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <hr>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Indicadores Financeiros</h6>
+                                <table class="table table-sm">
+                                    <tr><td><strong>Limite de Crédito:</strong></td><td>R$ ${parseFloat(cliente.Limite_Credito || 0).toLocaleString('pt-BR')}</td></tr>
+                                    <tr><td><strong>Débito Total:</strong></td><td>R$ ${parseFloat(cliente.Total_Debito || 0).toLocaleString('pt-BR')}</td></tr>
+                                    <tr><td><strong>Utilização do Limite:</strong></td><td>${analise.indicadores.utilizacao_limite}%</td></tr>
+                                    <tr><td><strong>Participação no Faturamento:</strong></td><td>${cliente.Per_ParticFat || 0}%</td></tr>
+                                </table>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Histórico de Pagamentos</h6>
+                                <table class="table table-sm">
+                                    <tr><td><strong>Atraso Atual:</strong></td><td>${analise.indicadores.dias_atraso_atual} dias</td></tr>
+                                    <tr><td><strong>Maior Atraso Histórico:</strong></td><td>${analise.indicadores.maior_atraso_historico} dias</td></tr>
+                                    <tr><td><strong>Média de Atraso:</strong></td><td>${analise.indicadores.media_atraso} dias</td></tr>
+                                    <tr><td><strong>Última Fatura:</strong></td><td>R$ ${parseFloat(cliente.Valor_UltimaFatura || 0).toLocaleString('pt-BR')}</td></tr>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <hr>
+                        
+                        <div class="row">
+                            <div class="col-md-12">
+                                <h6>Tendências de Pagamento</h6>
+                                <ul>
+                                    ${analise.tendencias_pagamento.map(t => `<li>${t}</li>`).join('')}
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        ${analise.sugestoes.length > 0 ? `
+                        <div class="row mt-3">
+                            <div class="col-md-12">
+                                <div class="alert alert-warning">
+                                    <h6>Sugestões de Ação:</h6>
+                                    <ul>
+                                        ${analise.sugestoes.map(s => `<li>${s}</li>`).join('')}
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        ` : ''}
+                        
+                        <div class="row mt-3">
+                            <div class="col-md-12">
+                                <small class="text-muted">Análise realizada em: ${analise.data_analise}</small>
+                            </div>
+                        </div>
+                    `);
+                    
+                    $('#analiseModal').modal('show');
+                } else {
+                    alert('Erro ao carregar análise: ' + data.error);
+                }
+            });
+        }
+    </script>
+</body>
+</html>
