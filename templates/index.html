@@ -3,99 +3,137 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Análise de Crédito - Sistema</title>
+    <title>Análise de Crédito - VarejãoFarma</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.datatables.net/1.11.5/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        .card {
-            margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        /* --- AJUSTE GERAL DE FONTE --- */
+        body {
+            font-size: 0.9rem; /* Leve redução para caber mais dados */
         }
-        .score-badge {
-            font-size: 1.2em;
-            padding: 5px 15px;
+
+        /* --- CORREÇÃO DO DROPDOWN --- */
+        .dataTables_length select {
+            padding-right: 2.5rem !important;
+            padding-left: 0.75rem !important;
+            min-width: 80px;
+            background-position: right 0.75rem center;
         }
-        .risco-baixo { background-color: #28a745; }
-        .risco-moderado { background-color: #ffc107; color: #000; }
-        .risco-alto { background-color: #dc3545; }
-        .risco-muito-alto { background-color: #343a40; }
+
+        /* --- CORREÇÃO DE LARGURA E BARRA DE ROLAGEM --- */
+        #clientesTable {
+            table-layout: fixed; /* Força a tabela a respeitar 100% da largura */
+            width: 100% !important;
+        }
+
+        /* Permite que o texto quebre linha na tabela (essencial para Razão Social) */
+        table.dataTable tbody td {
+            white-space: normal !important;
+            word-wrap: break-word;
+            vertical-align: middle; /* Centraliza verticalmente */
+        }
+
+        /* Ajuste do cabeçalho para não quebrar linha e manter setas alinhadas */
+        table.dataTable thead > tr > th {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            padding-right: 20px !important;
+        }
+
+        .navbar-brand img {
+            max-height: 45px;
+            width: auto;
+        }
+
+        /* --- CORES DOS STATUS --- */
+        table.dataTable tbody td .badge {
+            font-size: 0.8rem !important;
+            font-weight: 600 !important;
+            padding: 5px 8px !important;
+            border-radius: 4px;
+            width: 100%;
+            max-width: 100px;
+            display: inline-block;
+        }
+
+        .risco-baixo { background-color: #d1e7dd !important; color: #0f5132 !important; border: 1px solid #badbcc; }
+        .risco-moderado { background-color: #fff3cd !important; color: #664d03 !important; border: 1px solid #ffecb5; }
+        .risco-alto { background-color: #f8d7da !important; color: #842029 !important; border: 1px solid #f5c6cb; }
+        .risco-muito-alto { background-color: #212529 !important; color: #ffffff !important; border: 1px solid #000000; }
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
         <div class="container-fluid">
-            <a class="navbar-brand" href="#">Análise de Crédito</a>
+            <a class="navbar-brand d-flex align-items-center" href="#">
+                <img src="{{ url_for('static', filename='Semfundo varejao.png') }}" alt="VarejãoFarma" class="me-2">
+                <strong>DMD</strong> Análise de Crédito
+            </a>
         </div>
     </nav>
 
     <div class="container-fluid mt-4">
-        <div class="row">
-            <div class="col-md-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="card-title mb-0">Dashboard de Crédito</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="row" id="dashboard-stats">
-                            <!-- Estatísticas serão carregadas aqui -->
-                        </div>
-                        <div class="row mt-4">
-                            <div class="col-md-8">
-                                <canvas id="riscoChart"></canvas>
-                            </div>
-                            <div class="col-md-4">
-                                <h6>Top Clientes</h6>
-                                <ul class="list-group" id="top-clientes">
-                                    <!-- Top clientes serão carregados aqui -->
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
+        <div class="row mb-4" id="dashboard-stats">
+            <div class="col-12 text-center">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Carregando...</span>
                 </div>
             </div>
         </div>
 
-        <div class="row">
-            <div class="col-md-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="card-title mb-0">Lista de Clientes</h5>
+        <div class="row mb-4">
+            <div class="col-md-4">
+                <div class="card h-100">
+                    <div class="card-header">Distribuição de Risco</div>
+                    <div class="card-body">
+                        <canvas id="riscoChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-8">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Carteira de Clientes</h5>
+                        <button class="btn btn-sm btn-outline-primary" onclick="$('#clientesTable').DataTable().ajax.reload()">Atualizar</button>
                     </div>
                     <div class="card-body">
-                        <table id="clientesTable" class="table table-striped">
-                            <thead>
-                                <tr>
-                                    <th>Código</th>
-                                    <th>Razão Social</th>
-                                    <th>Limite Crédito</th>
-                                    <th>Débito Total</th>
-                                    <th>Atraso Atual</th>
-                                    <th>Score</th>
-                                    <th>Classificação</th>
-                                    <th>Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <!-- Dados serão carregados via JavaScript -->
-                            </tbody>
-                        </table>
+                        <div>
+                            <table id="clientesTable" class="table table-striped table-hover w-100">
+                                <thead>
+                                    <tr>
+                                        <th>Cód.</th>
+                                        <th>Razão Social</th>
+                                        <th>Limite</th>
+                                        <th>Débito</th>
+                                        <th>Atraso</th>
+                                        <th>Score</th>
+                                        <th>Status</th>
+                                        <th>Ação</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Modal de Análise Detalhada -->
     <div class="modal fade" id="analiseModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Análise Detalhada</h5>
+                    <h5 class="modal-title">Relatório de Análise de Crédito</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body" id="modal-body">
-                    <!-- Conteúdo será carregado via JavaScript -->
+                    </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
                 </div>
             </div>
         </div>
@@ -105,45 +143,56 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.11.5/js/dataTables.bootstrap5.min.js"></script>
-    
+
     <script>
+        // Formatter para Moeda
+        const money = (val) => {
+            return parseFloat(val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        }
+
         $(document).ready(function() {
-            // Carregar dashboard
             carregarDashboard();
-            
-            // Carregar tabela de clientes
+
+            // Configuração DataTable
             const table = $('#clientesTable').DataTable({
-                ajax: {
-                    url: '/clientes',
-                    dataSrc: ''
-                },
+                ajax: { url: '/clientes', dataSrc: '' },
+                language: { url: "//cdn.datatables.net/plug-ins/1.11.5/i18n/pt-BR.json" },
+                autoWidth: false, // Desliga o cálculo automático para usarmos nossas larguras
                 columns: [
-                    { data: 'Codigo' },
-                    { data: 'Razao_Social' },
+                    { data: 'Codigo', width: '5%' },
+                    { data: 'Razao_Social', width: '30%' }, // Ganha mais espaço e quebra linha
+                    { data: 'Limite_Credito', render: money, width: '12%' },
+                    { data: 'Total_Debito', render: money, width: '12%' },
                     { 
-                        data: 'Limite_Credito',
+                        data: 'Atraso_Atual',
+                        width: '10%',
                         render: function(data) {
-                            return 'R$ ' + parseFloat(data || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                            return data > 0 ? `<span class="text-danger fw-bold" style="white-space: nowrap;">${data} dias</span>` : '<span class="text-success" style="white-space: nowrap;">Em dia</span>';
                         }
                     },
                     { 
-                        data: 'Total_Debito',
+                        data: 'score',
+                        width: '8%',
                         render: function(data) {
-                            return 'R$ ' + parseFloat(data || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                            if (!data || data === 0) return '<span class="text-muted">-</span>';
+                            let color = data > 700 ? 'success' : (data > 400 ? 'warning' : 'danger');
+                            return `<div class="progress" style="height: 15px;">
+                                      <div class="progress-bar bg-${color}" role="progressbar" style="width: ${data/10}%"></div>
+                                    </div><small class="text-muted d-block text-center" style="font-size: 0.7rem;">${data}</small>`;
                         }
                     },
-                    { data: 'Atraso_Atual' },
-                    { data: 'score' },
                     {
                         data: 'classificacao',
+                        width: '13%',
                         render: function(data, type, row) {
                             return `<span class="badge risco-${row.cor}">${data}</span>`;
                         }
                     },
                     {
                         data: 'Codigo',
+                        width: '10%',
                         render: function(data) {
-                            return `<button class="btn btn-sm btn-primary" onclick="verAnalise(${data})">Ver Análise</button>`;
+                            return `<button class="btn btn-sm btn-primary py-0" style="font-size: 0.8rem;" onclick="verAnalise(${data})">Analisar</button>`;
                         }
                     }
                 ]
@@ -152,156 +201,150 @@
 
         function carregarDashboard() {
             $.get('/dashboard', function(data) {
-                if (!data.error) {
-                    // Atualizar estatísticas
-                    $('#dashboard-stats').html(`
-                        <div class="col-md-3">
-                            <div class="card text-white bg-primary">
-                                <div class="card-body">
-                                    <h6>Total Clientes</h6>
-                                    <h3>${data.total_clientes}</h3>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="card text-white bg-danger">
-                                <div class="card-body">
-                                    <h6>Bloqueados</h6>
-                                    <h3>${data.clientes_bloqueados}</h3>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="card text-white bg-success">
-                                <div class="card-body">
-                                    <h6>Média Score</h6>
-                                    <h3>${data.media_score}</h3>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="card text-white bg-warning">
-                                <div class="card-body">
-                                    <h6>Utilização Média</h6>
-                                    <h3>${data.media_utilizacao}%</h3>
-                                </div>
-                            </div>
-                        </div>
-                    `);
+                if(data.error) return;
 
-                    // Atualizar gráfico
-                    const ctx = document.getElementById('riscoChart').getContext('2d');
-                    new Chart(ctx, {
-                        type: 'doughnut',
-                        data: {
-                            labels: Object.keys(data.classificacoes),
-                            datasets: [{
-                                data: Object.values(data.classificacoes),
-                                backgroundColor: ['#28a745', '#ffc107', '#dc3545', '#343a40']
-                            }]
-                        }
-                    });
+                $('#dashboard-stats').html(`
+                    <div class="col-md-3">
+                        <div class="card text-white bg-primary mb-3">
+                            <div class="card-body p-3">
+                                <h6 class="card-title" style="font-size: 0.9rem;">Total Clientes</h6>
+                                <h3 class="card-text mb-0">${data.total_clientes}</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-white bg-danger mb-3">
+                            <div class="card-body p-3">
+                                <h6 class="card-title" style="font-size: 0.9rem;">Bloqueados</h6>
+                                <h3 class="card-text mb-0">${data.clientes_bloqueados}</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-white bg-success mb-3">
+                            <div class="card-body p-3">
+                                <h6 class="card-title" style="font-size: 0.9rem;">Score Médio</h6>
+                                <h3 class="card-text mb-0">${data.media_score}</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-white bg-warning mb-3">
+                            <div class="card-body text-dark p-3">
+                                <h6 class="card-title" style="font-size: 0.9rem;">Utilização Média</h6>
+                                <h3 class="card-text mb-0">${data.media_utilizacao}%</h3>
+                            </div>
+                        </div>
+                    </div>
+                `);
 
-                    // Top clientes
-                    const topClientesList = $('#top-clientes');
-                    topClientesList.empty();
-                    data.top_clientes.forEach(cliente => {
-                        topClientesList.append(`
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                ${cliente.razao_social}
-                                <span class="badge bg-primary rounded-pill">${cliente.score}</span>
-                            </li>
-                        `);
-                    });
-                }
+                const ctx = document.getElementById('riscoChart').getContext('2d');
+                if (window.myChart) window.myChart.destroy();
+                
+                window.myChart = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: Object.keys(data.classificacoes),
+                        datasets: [{
+                            data: Object.values(data.classificacoes),
+                            backgroundColor: ['#198754', '#ffc107', '#dc3545', '#212529']
+                        }]
+                    },
+                    options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+                });
             });
         }
 
         function verAnalise(codigo) {
+            $('#modal-body').html('<div class="text-center p-5"><div class="spinner-border text-primary"></div><p>Calculando risco...</p></div>');
+            $('#analiseModal').modal('show');
+
             $.get(`/analise/${codigo}`, function(data) {
-                if (!data.error) {
-                    const cliente = data.cliente;
-                    const analise = data;
-                    
-                    $('#modal-body').html(`
-                        <div class="row">
-                            <div class="col-md-6">
-                                <h6>Informações do Cliente</h6>
-                                <table class="table table-sm">
-                                    <tr><td><strong>Código:</strong></td><td>${cliente.Codigo}</td></tr>
-                                    <tr><td><strong>Razão Social:</strong></td><td>${cliente.Razao_Social}</td></tr>
-                                    <tr><td><strong>Fantasia:</strong></td><td>${cliente.Fantasia || '-'}</td></tr>
-                                    <tr><td><strong>CNPJ/CPF:</strong></td><td>${cliente.Cgc_Cpf || '-'}</td></tr>
-                                </table>
-                            </div>
-                            <div class="col-md-6">
-                                <h6>Score de Crédito</h6>
-                                <div class="text-center">
-                                    <h1 class="display-4">${analise.score}</h1>
-                                    <span class="badge ${analise.cor_risco} score-badge">${analise.classificacao_risco}</span>
-                                    <p class="mt-2"><strong>Sugestão:</strong> ${analise.limite_sugerido}</p>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <hr>
-                        
-                        <div class="row">
-                            <div class="col-md-6">
-                                <h6>Indicadores Financeiros</h6>
-                                <table class="table table-sm">
-                                    <tr><td><strong>Limite de Crédito:</strong></td><td>R$ ${parseFloat(cliente.Limite_Credito || 0).toLocaleString('pt-BR')}</td></tr>
-                                    <tr><td><strong>Débito Total:</strong></td><td>R$ ${parseFloat(cliente.Total_Debito || 0).toLocaleString('pt-BR')}</td></tr>
-                                    <tr><td><strong>Utilização do Limite:</strong></td><td>${analise.indicadores.utilizacao_limite}%</td></tr>
-                                    <tr><td><strong>Participação no Faturamento:</strong></td><td>${cliente.Per_ParticFat || 0}%</td></tr>
-                                </table>
-                            </div>
-                            <div class="col-md-6">
-                                <h6>Histórico de Pagamentos</h6>
-                                <table class="table table-sm">
-                                    <tr><td><strong>Atraso Atual:</strong></td><td>${analise.indicadores.dias_atraso_atual} dias</td></tr>
-                                    <tr><td><strong>Maior Atraso Histórico:</strong></td><td>${analise.indicadores.maior_atraso_historico} dias</td></tr>
-                                    <tr><td><strong>Média de Atraso:</strong></td><td>${analise.indicadores.media_atraso} dias</td></tr>
-                                    <tr><td><strong>Última Fatura:</strong></td><td>R$ ${parseFloat(cliente.Valor_UltimaFatura || 0).toLocaleString('pt-BR')}</td></tr>
-                                </table>
-                            </div>
-                        </div>
-                        
-                        <hr>
-                        
-                        <div class="row">
-                            <div class="col-md-12">
-                                <h6>Tendências de Pagamento</h6>
-                                <ul>
-                                    ${analise.tendencias_pagamento.map(t => `<li>${t}</li>`).join('')}
-                                </ul>
-                            </div>
-                        </div>
-                        
-                        ${analise.sugestoes.length > 0 ? `
-                        <div class="row mt-3">
-                            <div class="col-md-12">
-                                <div class="alert alert-warning">
-                                    <h6>Sugestões de Ação:</h6>
-                                    <ul>
-                                        ${analise.sugestoes.map(s => `<li>${s}</li>`).join('')}
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-                        ` : ''}
-                        
-                        <div class="row mt-3">
-                            <div class="col-md-12">
-                                <small class="text-muted">Análise realizada em: ${analise.data_analise}</small>
-                            </div>
-                        </div>
-                    `);
-                    
-                    $('#analiseModal').modal('show');
-                } else {
-                    alert('Erro ao carregar análise: ' + data.error);
+                if (data.error) {
+                    $('#modal-body').html(`<div class="alert alert-danger">${data.error}</div>`);
+                    return;
                 }
+                
+                const c = data.cliente;
+                const ind = data.indicadores;
+
+                let html = `
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <div class="p-3 bg-light rounded border">
+                                <h4 class="mb-0">${c.Razao_Social}</h4>
+                                <small class="text-muted">CNPJ/CPF: ${c.Cgc_Cpf || '-'} | Fantasia: ${c.Fantasia || '-'}</small>
+                                <div class="mt-2">
+                                    <span class="badge bg-secondary">Cód: ${c.Codigo}</span>
+                                    <span class="badge bg-info text-dark">Cadastro: ${c.Data_Cadastro || 'N/A'}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6 text-center border-end">
+                            <h6 class="text-uppercase text-muted">Score de Crédito</h6>
+                            <div class="display-1 fw-bold ${data.score > 700 ? 'text-success' : (data.score > 400 ? 'text-warning' : 'text-danger')}">
+                                ${data.score}
+                            </div>
+                            <span class="badge ${data.cor_risco} fs-6 px-3 py-2">${data.classificacao_risco}</span>
+                            <div class="mt-3 alert alert-light border">
+                                <strong>Sugestão de Limite:</strong><br>
+                                ${data.limite_sugerido}
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <h6 class="text-uppercase text-muted mb-3">Indicadores Financeiros</h6>
+                            <ul class="list-group list-group-flush">
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    Limite Atual
+                                    <span class="fw-bold">${money(c.Limite_Credito)}</span>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    Total em Débito
+                                    <span class="fw-bold text-danger">${money(c.Total_Debito)}</span>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    Utilização
+                                    <span class="badge ${ind.utilizacao_limite > 80 ? 'bg-danger' : 'bg-success'} rounded-pill">${ind.utilizacao_limite}%</span>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    Atraso Atual
+                                    <span class="fw-bold ${ind.dias_atraso_atual > 0 ? 'text-danger' : 'text-success'}">${ind.dias_atraso_atual} dias</span>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    Pior Atraso Histórico
+                                    <span>${ind.maior_atraso_historico} dias</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <h6 class="text-danger">⚠ Pontos de Atenção</h6>
+                            <ul class="list-group list-group-flush">
+                                ${data.tendencias_pagamento.length ? data.tendencias_pagamento.map(t => `<li class="list-group-item text-danger small"><i class="bi bi-exclamation-circle"></i> ${t}</li>`).join('') : '<li class="list-group-item text-success small">Nenhum ponto crítico detectado.</li>'}
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-primary">💡 Recomendações</h6>
+                            <ul class="list-group list-group-flush">
+                                ${data.sugestoes.map(s => `<li class="list-group-item list-group-item-action small">${s}</li>`).join('')}
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div class="row mt-3">
+                        <div class="col-12 text-end">
+                            <small class="text-muted">Análise gerada em: ${data.data_analise}</small>
+                        </div>
+                    </div>
+                `;
+                
+                $('#modal-body').html(html);
             });
         }
     </script>
